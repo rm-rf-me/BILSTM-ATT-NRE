@@ -31,7 +31,7 @@ HIDDEN_DIM = 200
 TAG_SIZE = len(relation2id)
 
 BATCH = 128
-EPOCHS = 100
+EPOCHS = 120
 
 config = {}
 config['EMBEDDING_SIZE'] = EMBEDDING_SIZE
