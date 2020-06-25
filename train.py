@@ -18,21 +18,7 @@ with open('./data/people_relation_train.pkl', 'rb') as inp:
     word2id = pickle.load(inp)
     id2word = pickle.load(inp)
     relation2id = pickle.load(inp)
-    train = pickle.load(inp)
-    labels = pickle.load(inp)
-    position1 = pickle.load(inp)
-    position2 = pickle.load(inp)
 
-# with open('./data/engdata_test.pkl', 'rb') as inp:
-with open('./data/people_relation_test.pkl', 'rb') as inp:
-    test = pickle.load(inp)
-    labels_t = pickle.load(inp)
-    position1_t = pickle.load(inp)
-    position2_t = pickle.load(inp)
-
-print("train len", len(train))
-print("test len", len(test))
-print("word2id len", len(word2id))
 
 EMBEDDING_SIZE = len(word2id) + 1
 EMBEDDING_DIM = 100
@@ -92,8 +78,8 @@ class trainer (object) :
         embedding_pre = np.asarray(self.embedding_pre)
         print(embedding_pre.shape)
 
+    def get_data (self) :
 
-    def train (self) :
         with open('./data/people_relation_train.pkl', 'rb') as inp:
             word2id = pickle.load(inp)
             id2word = pickle.load(inp)
@@ -126,6 +112,12 @@ class trainer (object) :
         labels_t = torch.LongTensor(labels_t[:len(test) - len(test) % BATCH])
         test_datasets = D.TensorDataset(test, position1_t, position2_t, labels_t)
         test_dataloader = D.DataLoader(test_datasets, BATCH, True, num_workers=2)
+
+        return train_dataloader, test_dataloader
+
+
+    def train (self) :
+        train_dataloader, test_dataloader = self.get_data()
 
         for epoch in range(EPOCHS):
             print("epoch:", epoch)
