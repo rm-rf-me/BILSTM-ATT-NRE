@@ -65,31 +65,33 @@ class trainer (object) :
 
 
         self.embedding_pre = []
-        if len(sys.argv) == 2 and sys.argv[1] == "pretrained":
-            print()
-            "use pretrained embedding"
-            config["pretrained"] = True
-            word2vec = {}
-            with codecs.open('vec.txt', 'r', 'utf-8') as input_data:
-                for line in input_data.readlines():
-                    word2vec[line.split()[0]] = list(map(eval, line.split()[1:]))
-
-            unknow_pre = []
-            unknow_pre.extend([1] * 100)
-            self.embedding_pre.append(unknow_pre)  # wordvec id 0
-            for word in word2id:
-                if word in word2vec:
-                    self.embedding_pre.append(word2vec[word])
-                else:
-                    self.embedding_pre.append(unknow_pre)
-
-            embedding_pre = np.asarray(self.embedding_pre)
-            print(embedding_pre.shape)
+        if config["pretrained"] == True:
+            self.get_pre_()
 
         self.model = BiLSTM_ATT(config, self.embedding_pre).to(self.device)
         # model = torch.load('model/model_epoch20.pkl')
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=1e-5)
         self.criterion = nn.CrossEntropyLoss(size_average=True)
+
+    def get_pre_ (self) :
+        print("use pretrained embedding")
+        word2vec = {}
+        with codecs.open('vec.txt', 'r', 'utf-8') as input_data:
+            for line in input_data.readlines():
+                word2vec[line.split()[0]] = list(map(eval, line.split()[1:]))
+
+        unknow_pre = []
+        unknow_pre.extend([1] * 100)
+        self.embedding_pre.append(unknow_pre)  # wordvec id 0
+        for word in word2id:
+            if word in word2vec:
+                self.embedding_pre.append(word2vec[word])
+            else:
+                self.embedding_pre.append(unknow_pre)
+
+        embedding_pre = np.asarray(self.embedding_pre)
+        print(embedding_pre.shape)
+
 
     def train (self) :
         with open('./data/people_relation_train.pkl', 'rb') as inp:
