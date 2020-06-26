@@ -4,17 +4,17 @@
 # coding:utf8
 import numpy as np
 import pickle
-import sys
 import codecs
+import jieba
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as D
 from torch.autograd import Variable
-from BiLSTM_ATT import BiLSTM_ATT
+from model.BiLSTM_ATT import BiLSTM_ATT
 
 # with open('./data/engdata_train.pkl', 'rb') as inp:
-with open('./data/people_relation_train.pkl', 'rb') as inp:
+with open('./data/people_relation_train3.pkl', 'rb') as inp:
     word2id = pickle.load(inp)
     id2word = pickle.load(inp)
     relation2id = pickle.load(inp)
@@ -31,7 +31,7 @@ HIDDEN_DIM = 200
 TAG_SIZE = len(relation2id)
 
 BATCH = 128
-EPOCHS = 10
+EPOCHS = 150
 
 config = {}
 config['EMBEDDING_SIZE'] = EMBEDDING_SIZE
@@ -41,7 +41,7 @@ config['POS_DIM'] = POS_DIM
 config['HIDDEN_DIM'] = HIDDEN_DIM
 config['TAG_SIZE'] = TAG_SIZE
 config['BATCH'] = BATCH
-config["pretrained"] = False
+config["pretrained"] = True
 
 class trainer (object) :
     def __init__(self):
@@ -62,7 +62,7 @@ class trainer (object) :
     def get_pre_ (self) :
         print("use pretrained embedding")
         word2vec = {}
-        with codecs.open('vec.txt', 'r', 'utf-8') as input_data:
+        with codecs.open('ctb.50d.vec', 'r', 'utf-8') as input_data:
             for line in input_data.readlines():
                 word2vec[line.split()[0]] = list(map(eval, line.split()[1:]))
 
@@ -80,7 +80,7 @@ class trainer (object) :
 
     def get_data (self) :
 
-        with open('./data/people_relation_train.pkl', 'rb') as inp:
+        with open('./data/people_relation_train3.pkl', 'rb') as inp:
             word2id = pickle.load(inp)
             id2word = pickle.load(inp)
             relation2id = pickle.load(inp)
@@ -90,7 +90,7 @@ class trainer (object) :
             position2 = pickle.load(inp)
 
         # with open('./data/engdata_test.pkl', 'rb') as inp:
-        with open('./data/people_relation_test.pkl', 'rb') as inp:
+        with open('./data/people_relation_test3.pkl', 'rb') as inp:
             test = pickle.load(inp)
             labels_t = pickle.load(inp)
             position1_t = pickle.load(inp)
@@ -118,12 +118,16 @@ class trainer (object) :
 
     def train (self) :
         train_dataloader, test_dataloader = self.get_data()
-
+        best_f1 = 0
+        best_r = 0
+        best_p = 0
         for epoch in range(EPOCHS):
+            self.model.train()
             print("epoch:", epoch)
             acc = 0
             total = 0
 
+            losses = 0.
             for sentence, pos1, pos2, tag in train_dataloader:
                 sentence = Variable(sentence).to(self.device)
                 pos1 = Variable(pos1).to(self.device)
@@ -131,6 +135,7 @@ class trainer (object) :
                 y = self.model(sentence, pos1, pos2)
                 tags = Variable(tag).to(self.device)
                 loss = self.criterion(y, tags).to(self.device)
+                losses += loss.item()
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
@@ -143,46 +148,58 @@ class trainer (object) :
                     total += 1
 
             print("train:",100*float(acc)/total,"%")
+            print ("loss:", losses / total)
+            losses = 0.
 
-            acc_t = 0
-            total_t = 0
-            count_predict = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-            count_total = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-            count_right = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-            for sentence, pos1, pos2, tag in test_dataloader:
-                sentence = Variable(sentence).to(self.device)
-                pos1 = Variable(pos1).to(self.device)
-                pos2 = Variable(pos2).to(self.device)
-                y = self.model(sentence, pos1, pos2)
-                y = np.argmax(y.cpu().data.numpy(), axis=1)
-                for y1, y2 in zip(y, tag):
-                    count_predict[y1] += 1
-                    count_total[y2] += 1
-                    if y1 == y2:
-                        count_right[y1] += 1
+            self.model.eval()
+            with torch.no_grad () :
+                acc_t = 0
+                total_t = 0
+                count_predict = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                count_total = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                count_right = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                for sentence, pos1, pos2, tag in test_dataloader:
+                    sentence = Variable(sentence).to(self.device)
+                    pos1 = Variable(pos1).to(self.device)
+                    pos2 = Variable(pos2).to(self.device)
+                    y = self.model(sentence, pos1, pos2)
+                    tags = Variable(tag).to(self.device)
+                    losss = self.criterion(y, tags).to(self.device)
+                    y = np.argmax(y.cpu().data.numpy(), axis=1)
+                    for y1, y2 in zip(y, tag):
+                        count_predict[y1] += 1
+                        count_total[y2] += 1
+                        if y1 == y2:
+                            count_right[y1] += 1
+                print ("test loss:", losss.item())
+                precision = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                recall = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                for i in range(len(count_predict)):
+                    if count_predict[i] != 0:
+                        precision[i] = float(count_right[i]) / count_predict[i]
 
-            precision = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-            recall = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-            for i in range(len(count_predict)):
-                if count_predict[i] != 0:
-                    precision[i] = float(count_right[i]) / count_predict[i]
+                    if count_total[i] != 0:
+                        recall[i] = float(count_right[i]) / count_total[i]
 
-                if count_total[i] != 0:
-                    recall[i] = float(count_right[i]) / count_total[i]
+                precision = sum(precision) / len(relation2id)
+                recall = sum(recall) / len(relation2id)
+                print("准确率：", precision)
+                print("召回率：", recall)
+                print("f：", (2 * precision * recall) / (precision + recall))
 
-            precision = sum(precision) / len(relation2id)
-            recall = sum(recall) / len(relation2id)
-            print("准确率：", precision)
-            print("召回率：", recall)
-            print("f：", (2 * precision * recall) / (precision + recall))
+                if (best_f1 < (2 * precision * recall) / (precision + recall)) :
+                    best_f1 = (2 * precision * recall) / (precision + recall)
+                    best_p = precision
+                    best_r = recall
 
-            if epoch % 20 == 0:
-                model_name = "./model/model_epoch" + str(epoch) + ".pkl"
-                torch.save(self.model, model_name)
-                print(model_name,"has been saved")
+                # if epoch % 20 == 0:
+                #     model_name = "./model/model_epoch" + str(epoch) + ".pkl"
+                #     torch.save(self.model, model_name)
+                #     print(model_name,"has been saved")
 
         torch.save(self.model, "./model/model_01.pkl")
         print("model has been saved")
+        print ("best_f1:", best_f1)
 
 if __name__ == '__main__':
     T = trainer()
