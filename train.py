@@ -49,7 +49,7 @@ class trainer (object) :
         self.lr = 0.0005
         self.config = config
 
-
+        print ("loading embedding...")
         self.embedding_pre = []
         if config["pretrained"] == True:
             self.get_pre_()
@@ -58,6 +58,7 @@ class trainer (object) :
         # model = torch.load('model/model_epoch20.pkl')
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=1e-5)
         self.criterion = nn.CrossEntropyLoss(size_average=True)
+        print ("get model!")
 
     def get_pre_ (self) :
         print("use pretrained embedding")
@@ -104,17 +105,32 @@ class trainer (object) :
         position2 = torch.LongTensor(position2[:len(train) - len(train) % BATCH])
         labels = torch.LongTensor(labels[:len(train) - len(train) % BATCH])
         train_datasets = D.TensorDataset(train, position1, position2, labels)
-        train_dataloader = D.DataLoader(train_datasets, BATCH, True, num_workers=2)
+        train_dataloader = D.DataLoader(train_datasets, BATCH, True, num_workers=0)
 
         test = torch.LongTensor(test[:len(test) - len(test) % BATCH])
         position1_t = torch.LongTensor(position1_t[:len(test) - len(test) % BATCH])
         position2_t = torch.LongTensor(position2_t[:len(test) - len(test) % BATCH])
         labels_t = torch.LongTensor(labels_t[:len(test) - len(test) % BATCH])
         test_datasets = D.TensorDataset(test, position1_t, position2_t, labels_t)
-        test_dataloader = D.DataLoader(test_datasets, BATCH, True, num_workers=2)
+        test_dataloader = D.DataLoader(test_datasets, BATCH, True, num_workers=0)
 
         return train_dataloader, test_dataloader
 
+    def test (self, seq, peo1, peo2) :
+
+        self.model = torch.load('./model/model_01.pkl')
+
+        self.model.eval()
+        with torch.no_grad():
+
+            sentence = Variable(seq).to(self.device)
+            pos1 = Variable(peo1).to(self.device)
+            pos2 = Variable(peo2).to(self.device)
+            y = self.model(sentence, pos1, pos2)
+
+            y = np.argmax(y.cpu().data.numpy(), axis=1)
+
+            return y
 
     def train (self) :
         train_dataloader, test_dataloader = self.get_data()
@@ -200,6 +216,8 @@ class trainer (object) :
         torch.save(self.model, "./model/model_01.pkl")
         print("model has been saved")
         print ("best_f1:", best_f1)
+
+
 
 if __name__ == '__main__':
     T = trainer()
